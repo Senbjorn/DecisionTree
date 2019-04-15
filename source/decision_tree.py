@@ -26,7 +26,7 @@ class DecisionTreeClassifier:
         self.n_samples = None
         self.root = None
 
-    def fit(self, data):
+    def fit(self, data, min_count=1, max_depth=1e100):
         self.data = data
         self.n_features = len(data[0][0])
         self.n_samples = len(data[1])
@@ -36,9 +36,9 @@ class DecisionTreeClassifier:
         self.frequencies = self.classes[1] / np.sum(self.classes[1])
         self.data_index = (data[0], np.array([self.class_indices[y] for y in data[1]]))
         self.root = BinaryFilterNode()
-        self.fit_gini([i for i in range(self.n_samples)], self.root)
+        self.fit_gini([i for i in range(self.n_samples)], self.root, min_count=min_count, max_depth=max_depth)
 
-    def fit_gini(self, pos, node, min_count=1):
+    def fit_gini(self, pos, node, min_count=1, max_depth=1e10, depth=1):
         m = len(pos)
         min_j = None
         min_i = None
@@ -46,8 +46,14 @@ class DecisionTreeClassifier:
         for j in range(self.n_features):
             pos_j = sorted(pos, key=lambda x: self.data_index[0][x, j])
             for i in range(m - 1):
-                value = ((i + 1) / m * gini(self.data_index[1][pos_j[:i+1]], self.frequencies) +
-                        (m - i - 1) / m * gini(self.data_index[1][pos_j[i+1:]], self.frequencies))
+                left_pos = pos_j[:i + 1]
+                right_pos = pos_j[i + 1:]
+                left_data = self.data_index[1][left_pos]
+                right_data = self.data_index[1][right_pos]
+                left_frequencies = np.bincount(left_data, minlength=self.n_classes) / (i + 1)
+                right_frequencies = np.bincount(right_data, minlength=self.n_classes) / (m - (i + 1))
+                value = ((i + 1) / m * gini(left_data, left_frequencies) +
+                        (m - i - 1) / m * gini(right_data, right_frequencies))
                 if value <= min_value:
                     min_value = value
                     min_j = j
@@ -60,20 +66,20 @@ class DecisionTreeClassifier:
         node.data = (self.data_index[0][pos_j[min_i], min_j], min_j)
         left_node = BinaryFilterNode()
         right_node = BinaryFilterNode()
-        if min_i + 1 <= min_count:
+        if min_i + 1 <= min_count or depth == max_depth:
             node.add_successor(
                 LeafNode([len(left_data[left_data == i]) / len(left_pos) for i in range(self.n_classes)]))
         else:
             # print("l:", left_pos)
             node.add_successor(left_node)
-            self.fit_gini(left_pos, left_node, min_count=min_count)
-        if m - (min_i + 1) <= min_count:
+            self.fit_gini(left_pos, left_node, min_count=min_count, max_depth=max_depth, depth=depth + 1)
+        if m - (min_i + 1) <= min_count or depth == max_depth:
             node.add_successor(
                 LeafNode([len(right_data[right_data == i]) / len(right_pos) for i in range(self.n_classes)]))
         else:
             # print("r:", right_pos)
             node.add_successor(right_node)
-            self.fit_gini(right_pos, right_node, min_count=min_count)
+            self.fit_gini(right_pos, right_node, min_count=min_count, max_depth=max_depth, depth=depth + 1)
 
     def predict(self, x):
         node = self.root
@@ -94,18 +100,41 @@ def get_meshgrid(data, step=0.01, border=2.0):
 
 
 if __name__ == "__main__":
-    from sklearn import datasets
+    from sklearn import datasets, metrics
+    from sklearn.model_selection import train_test_split
+
+    d = datasets.make_classification(10000, n_features=2, n_informative=2, n_redundant=0, n_classes=3,
+                                     n_clusters_per_class=1, random_state=4)
+    x_train, x_test, y_train, y_test = train_test_split(d[0], d[1], test_size=0.3, random_state=4)
+
     start_time = time.time()
-    d = datasets.make_classification(100, n_features=2, n_informative=2, n_redundant=0, n_classes=3, n_clusters_per_class=1)
     dtc = DecisionTreeClassifier()
-    dtc.fit(d)
+    dtc.fit((x_train, y_train), min_count=1, max_depth=5)
+    end_time = time.time() - start_time
+    print("Decision tree fit. Elapsed:", end_time)
+
+    start_time = time.time()
+    p_test = np.array([dtc.classes[0][np.argmax(dtc.predict(x))] for x in x_test])
+    acc_test = metrics.accuracy_score(y_test, p_test)
+    end_time = time.time() - start_time
+    print("Predict. Elapsed:", end_time)
+    print("Accuracy test:", acc_test)
+
+    start_time = time.time()
+    p_train = np.array([dtc.classes[0][np.argmax(dtc.predict(x))] for x in x_train])
+    acc_train = metrics.accuracy_score(y_train, p_train)
+    end_time = time.time() - start_time
+    print("Predict. Elapsed:", end_time)
+    print("Accuracy train:", acc_train)
+
+    start_time = time.time()
     xx, yy = get_meshgrid(d)
     p_grid = np.zeros(xx.shape)
     for i in range(xx.shape[0]):
         for j in range(xx.shape[1]):
             p_grid[i, j] = dtc.classes[0][np.argmax(dtc.predict([xx[i, j], yy[i, j]]))]
     end_time = time.time() - start_time
-    print("elaped:", end_time)
+    print("Mesh generation. Elapsed:", end_time)
     colors = ListedColormap(["red", "blue", "yellow"])
     colors_light = ListedColormap(['lightcoral', 'lightblue', 'lightyellow'])
     fig, ax = plt.subplots()

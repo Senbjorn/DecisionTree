@@ -1,0 +1,8 @@
+#Console output:
+
+Decision tree fit. Elapsed: 23.997162103652954
+Predict. Elapsed: 0.048427581787109375
+Accuracy test: 0.9193333333333333
+Predict. Elapsed: 0.0825660228729248
+Accuracy train: 0.9221428571428572
+Mesh generation. Elapsed: 14.211042165756226
