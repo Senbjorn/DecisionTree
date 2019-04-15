@@ -59,8 +59,8 @@ class DecisionTreeClassifier:
                     min_j = j
                     min_i = i
         pos_j = sorted(pos, key=lambda x: self.data_index[0][x, min_j])
-        left_pos = list(pos_j[:min_i + 1])
-        right_pos = list(pos_j[min_i + 1:])
+        left_pos = pos_j[:min_i + 1]
+        right_pos = pos_j[min_i + 1:]
         left_data = self.data_index[1][left_pos]
         right_data = self.data_index[1][right_pos]
         node.data = (self.data_index[0][pos_j[min_i], min_j], min_j)
